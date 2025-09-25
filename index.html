@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>调色游戏</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  html, body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden; /* 页面不滚动 */
+  }
+  .color-swatch {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+    border: 1px solid #aaa;
+  }
+  .color-box {
+    width: 80px;
+    height: 80px;
+    border: 1px solid #ccc;
+    margin-right: 12px;
+  }
+</style>
+</head>
+<body class="bg-gray-100 p-4 flex flex-col h-full">
+
+<h1 class="text-2xl font-bold mb-2">🎨 油画调色游戏</h1>
+
+<div class="flex flex-1 gap-6 h-[calc(100%-64px)]">
+  <!-- 左侧：画作 -->
+  <div class="flex flex-col w-2/3 border">
+    <label class="block mb-2 font-semibold">选择画作：</label>
+    <select id="artworkSelect" class="border p-2 mb-2 w-full">
+      <option value="Irises.jpg">Irises</option>
+      <option value="The_Kiss.jpg">The Kiss</option>
+      <option value="The_Red_Boy.jpg">The Red Boy</option>
+      <option value="Water_Lilies.jpg">Water Lilies</option>
+    </select>
+
+    <!-- 限高容器 -->
+    <div class="flex-1 flex justify-center items-center overflow-hidden">
+      <img id="artworkImage" src="Irises.jpg" class="h-full object-contain cursor-crosshair">
+    </div>
+
+    <p class="mt-1 text-gray-600">点击图片取目标颜色</p>
+  </div>
+
+  <!-- 右侧：调色区 -->
+  <div class="flex flex-col w-1/3 overflow-hidden">
+    <h2 class="text-xl font-semibold mb-2">调色区</h2>
+
+    <!-- 目标色 & 当前混合色 -->
+    <div class="flex mb-4">
+      <div>
+        <p class="font-medium">目标色</p>
+        <div id="targetColorBox" class="color-box"></div>
+      </div>
+      <div>
+        <p class="font-medium">当前混合色</p>
+        <div id="mixedColorBox" class="color-box"></div>
+      </div>
+      <div class="ml-4">
+        <p class="font-medium">匹配度</p>
+        <div id="matchPercent" class="text-lg font-bold text-blue-600">0%</div>
+      </div>
+    </div>
+
+    <!-- 滑块区域 -->
+    <div id="sliders" class="flex-1 overflow-auto pr-2"></div>
+
+    <button id="resetBtn" class="mt-2 p-2 bg-blue-500 text-white rounded hover:bg-blue-600">重置滑块</button>
+  </div>
+</div>
+
+<script>
+const pigments = {
+  "翠绿": "#2ecc71",
+  "橙色": "#e67e22",
+  "紫罗兰": "#8e44ad",
+  "钛白": "#ecf0f1",
+  "镉红": "#e74c3c",
+  "镉黄": "#f1c40f",
+  "群青蓝": "#34495e",
+  "象牙黑": "#2c3e50",
+  "黄土色": "#d2b48c"
+};
+
+const slidersDiv = document.getElementById("sliders");
+const artworkImage = document.getElementById("artworkImage");
+const artworkSelect = document.getElementById("artworkSelect");
+const targetColorBox = document.getElementById("targetColorBox");
+const mixedColorBox = document.getElementById("mixedColorBox");
+const matchPercentDiv = document.getElementById("matchPercent");
+const resetBtn = document.getElementById("resetBtn");
+
+let targetColor = [0,0,0];
+let sliders = [];
+
+// 创建滑块
+for (let name in pigments) {
+  let container = document.createElement("div");
+  container.className = "flex items-center mb-2";
+
+  let swatch = document.createElement("span");
+  swatch.className = "color-swatch";
+  swatch.style.backgroundColor = pigments[name];
+
+  let label = document.createElement("label");
+  label.textContent = name;
+  label.className = "w-20";
+
+  let slider = document.createElement("input");
+  slider.type = "range";
+  slider.min = 0;
+  slider.max = 100;
+  slider.value = 0;
+  slider.className = "flex-1 ml-2";
+  slider.dataset.color = pigments[name];
+  slider.addEventListener("input", updateMix);
+
+  container.appendChild(swatch);
+  container.appendChild(label);
+  container.appendChild(slider);
+  slidersDiv.appendChild(container);
+
+  sliders.push(slider);
+}
+
+// 切换图片
+artworkSelect.addEventListener("change", () => {
+  artworkImage.src = artworkSelect.value;
+});
+
+// 点击取色
+artworkImage.addEventListener("click", (e) => {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  canvas.width = artworkImage.naturalWidth;
+  canvas.height = artworkImage.naturalHeight;
+  ctx.drawImage(artworkImage, 0, 0);
+
+  const rect = artworkImage.getBoundingClientRect();
+  const x = Math.floor((e.clientX - rect.left) * artworkImage.naturalWidth / rect.width);
+  const y = Math.floor((e.clientY - rect.top) * artworkImage.naturalHeight / rect.height);
+
+  const data = ctx.getImageData(x, y, 1, 1).data;
+  targetColor = [data[0], data[1], data[2]];
+  targetColorBox.style.backgroundColor = `rgb(${targetColor.join(",")})`;
+  updateMix();
+});
+
+// 更新混合色和匹配度
+function updateMix(){
+  let r=0,g=0,b=0,total=0;
+  sliders.forEach(s=>{
+    let val=parseInt(s.value);
+    let c=hexToRgb(s.dataset.color);
+    r+=c[0]*val; g+=c[1]*val; b+=c[2]*val;
+    total+=val;
+  });
+  if(total>0){ r=Math.round(r/total); g=Math.round(g/total); b=Math.round(b/total);}
+  else r=g=b=255;
+  mixedColorBox.style.backgroundColor=`rgb(${r},${g},${b})`;
+
+  let diff=Math.sqrt((r-targetColor[0])**2+(g-targetColor[1])**2+(b-targetColor[2])**2);
+  let percent=Math.max(0,100-diff/4.5);
+  matchPercentDiv.textContent=percent.toFixed(1)+"%";
+}
+
+// 重置滑块
+resetBtn.addEventListener("click",()=>{
+  sliders.forEach(s=>s.value=0);
+  updateMix();
+});
+
+function hexToRgb(hex){
+  let bigint=parseInt(hex.slice(1),16);
+  return [(bigint>>16)&255,(bigint>>8)&255, bigint&255];
+}
+</script>
+</body>
+</html>
